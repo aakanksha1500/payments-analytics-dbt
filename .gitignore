@@ -8,3 +8,4 @@ logs/
 *.duckdb.wal
 data/raw/
 .DS_Store
+.user.yml

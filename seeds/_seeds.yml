@@ -1,0 +1,7 @@
+seeds:
+  - name: currencies
+    columns:
+      - name: currency_code
+        data_tests:
+          - unique
+          - not_null

@@ -58,3 +58,32 @@ dbt's relationships test ignores nulls: it checks that every value present point
 
 ### Freshness
 Freshness is checked on loaded_at: warn after 1 day, error after 3. FX rates use 3 and 5 days because there are no rates at weekends. The synthetic data ends on 29 October 2026, so freshness will start failing after that date. That is the check working as intended: no new data is arriving.
+
+
+## Phase 4: Intermediate models
+
+### Which FX rate does a weekend transaction use?
+The most recent earlier rate: a Saturday or Sunday amount uses Friday's rate. `int_fx_rates_valid` turns each rate into a validity range with `lead()`: valid from its own date until the next rate date for that currency (inclusive start, exclusive end). Amounts join to the range their date falls inside. DuckDB has a native ASOF JOIN, but Snowflake's syntax differs, so the range join is used to keep the SQL portable for Phase 10.
+
+EUR has no rows in the feed and uses a rate of 1. Each converted row keeps `fx_rate_date`, so it is always possible to see which rate was applied.
+
+### Amounts before the first FX rate
+The data starts on Saturday 1 August 2026 and the first rate was on Monday 3 August, so 940 non-EUR payments and 3 refunds on 1 and 2 August had no rate to fall back on. The singular test `assert_every_transaction_has_eur_amount` and the not_null test on refunds caught them.
+
+Fixed in the generator: FX rates now start 7 days before the first transaction, as a real rates feed would already have history. The alternative, falling back to the first available rate in SQL, would have converted weekend payments at a rate published after them.
+
+### Which date is used for conversion?
+Each amount is converted at the rate for its own event date: payments at the payment date, refunds at the refund date, chargebacks at the chargeback date. This matches the settlement rule in design.md: money moves when each event happens.
+
+### Why left joins?
+An inner join drops rows silently when the other side is missing: a payment with no FX rate, or a refund whose payment has not arrived, would disappear and totals would shrink with no error. Left joins keep the row with nulls, and tests catch the nulls. After each join, a unique test on the model's key guards against the join returning more than one row.
+
+### What happens to a refund whose original payment has not arrived?
+It is kept and flagged `is_orphan`. Its merchant comes from the refund's terminal, so it can still be deducted from the right merchant's settlement. When the payment arrives, the next run matches it automatically, because the models are views over all the data.
+Orphans found: [N refunds, N chargebacks]
+
+Orphan chargebacks are different: chargebacks have no terminal, so their merchant comes from the payment and is unknown until it arrives. The not_null test on their merchant_id is set to warn: they are a timing case, not broken data, and blocking all settlement for a few rows would be worse than a delayed deduction. They stay visible on every run.
+
+### Flags rather than filters
+Over-refunds, refunds of declined payments and chargeback amount mismatches are flagged (`is_over_refund`, `is_refund_of_declined`, `is_amount_mismatch`), not removed. The intermediate layer records what happened; the marts and the risk rules in Phase 5 and 8 decide how to treat it.
+Flags found: [N over-refunds, N refunds of declined payments, N amount mismatches]

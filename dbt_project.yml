@@ -33,4 +33,6 @@ models:
   payments:
     staging:
       +materialized: view
+    intermediate:
+      +materialized: view
       # Add stg_merchants, stg_terminals, stg_refunds, stg_chargebacks and stg_fx_rates below.

@@ -569,7 +569,16 @@ def main() -> None:
     txns = write_by_load_date(pd.concat(all_txns, ignore_index=True), out / "transactions", last_day)
     refunds = write_by_load_date(pd.concat(all_refunds, ignore_index=True), out / "refunds", last_day)
     chargebacks = write_by_load_date(pd.concat(all_chargebacks, ignore_index=True), out / "chargebacks", last_day)
-    write_by_load_date(make_fx_rates(rng_for(args.seed, STREAM_FX), args.start_date, args.days), out / "fx_rates", last_day)
+    fx_history_days = 7
+    write_by_load_date(
+        make_fx_rates(
+            rng_for(args.seed, STREAM_FX),
+            args.start_date - timedelta(days=fx_history_days),
+            args.days + fx_history_days,
+        ),
+        out / "fx_rates",
+        last_day,
+    )
     terminals.to_csv(out / "terminals.csv", index=False, date_format=TS_FORMAT)
 
     # The manifest lists only problems that actually made it into the written files.

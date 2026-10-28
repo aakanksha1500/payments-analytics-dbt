@@ -1,0 +1,19 @@
+models:
+  - name: dim_merchant
+    description: One row per merchant version (SCD2). A new version starts whenever a merchant's attributes change.
+    columns:
+      - name: merchant_version_key
+        description: Primary key. Identifies one version of one merchant.
+        data_tests:
+          - unique
+          - not_null
+
+      - name: merchant_id
+        data_tests:
+          - not_null
+
+      - name: merchant_tier
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['standard', 'silver', 'gold']

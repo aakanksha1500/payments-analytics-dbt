@@ -21,11 +21,11 @@ models:
         data_tests:
           - not_null:
               config:
-                severity: warn
+                severity: warn # planted problem, known and accepted for now
           - relationships:
               arguments:
                 to: ref('stg_terminals')
-                field: terminal_id   # planted problem, known and accepted for now
+                field: terminal_id   
 
       - name: currency_code
         data_tests:
@@ -67,5 +67,119 @@ models:
           - accepted_values:
               arguments:
                 values: ['countertop', 'mobile', 'online']
-
+  
+  - name: stg_refunds
+    description: One row per refund.
+    columns:
+      - name: refund_id
+        description: Primary key.
+        data_tests:
+          - unique
+          - not_null
       
+      - name: transaction_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_transactions')
+                field: transaction_id
+      
+      - name: terminal_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_terminals')
+                field: terminal_id
+      
+      - name: currency_code
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('currencies')
+                field: currency_code
+      
+      - name: amount
+        data_tests:
+          - not_null
+
+  - name: stg_chargebacks
+    description: One row per chargeback.
+    columns:
+      - name: chargeback_id
+        description: Primary key.
+        data_tests:
+          - unique
+          - not_null
+
+      - name: transaction_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_transactions')
+                field: transaction_id
+
+      - name: amount
+        data_tests:
+          - not_null
+
+      - name: currency_code
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('currencies')
+                field: currency_code
+
+      - name: reason_code
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['fraud', 'not_received', 'not_as_described', 'duplicate_processing']
+
+  - name: stg_fx_rates
+    description: One row per FX rate.
+    columns:
+      - name: fx_rate_key
+        description: Composite key for the FX rate.
+        data_tests:
+          - unique
+          - not_null
+
+      - name: rate_to_eur
+        description: FX rate to EUR.
+        data_tests:
+          - not_null
+
+      - name: currency_code
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('currencies')
+                field: currency_code
+  
+  - name: stg_merchants
+    description: One row per merchant per daily extract.
+    columns:
+      - name: merchant_extract_key
+        description: Composite key for the merchant extract.
+        data_tests:
+          - unique
+          - not_null
+      
+      - name: merchant_id
+        data_tests:
+          - not_null
+
+      - name: merchant_tier
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['standard', 'silver', 'gold']
+
+      - name: merchant_category
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ["grocery", "restaurant", "fuel", "retail", "travel", "digital_goods", "pharmacy"]

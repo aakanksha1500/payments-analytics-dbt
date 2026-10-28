@@ -33,3 +33,28 @@ With `store_failures` turned on in Phase 6, each failing dbt test saves its fail
 - **Two plants beyond the original plan:** one merchant changes tier twice on the same day, so Phase 5 can show what the snapshot records in that case; and three risky merchants and two risky terminals, so the Phase 4 risk flags and Phase 8 reverse ETL have something real to find.
 - **Generated data is not committed.** `data/raw/` is gitignored. The script and the seed are the source of truth, and anyone can recreate the data with one command.
 - **The output folder is wiped at the start of every run**, so files from an older run can never mix with new ones.
+
+
+## Phase 3: Sources and staging
+
+### Where does deduplication belong?
+In staging. Duplicates are a defect of the source, not business logic, and every downstream model should be able to assume one row per transaction_id. If deduplication lived in an intermediate model, any model reading staging directly would see duplicates.
+
+### Which duplicate is kept?
+The first copy to arrive (earliest loaded_at, with the file name as a tie-breaker so the result is deterministic). The planted duplicates are identical re-sends, so the copies hold the same values. Keeping the first means a row's loaded_at never moves forward, which the incremental model in Phase 5 relies on. If later copies were corrections rather than re-sends, the latest would be the right choice.
+
+### Grain of stg_merchants
+One row per merchant per daily extract. The source is a full extract every day, and collapsing it to one row per merchant would throw away the tier history the SCD2 snapshot in Phase 5 needs.
+
+### Why relationships and not_null are separate tests
+dbt's relationships test ignores nulls: it checks that every value present points to a real row. The 611 null terminal ids pass it and are caught by not_null instead, set to warn because they are a known planted problem.
+
+### What the tests found that was not planted
+- The currencies seed only contained EUR. The relationship test from transactions to the seed failed on 41,620 rows (every non-EUR payment) until the missing currencies were added.
+- The manifest listed 1,079 duplicate ids, the unique test found 1,074. Five duplicates would have arrived after the last generated day, so only one copy was written. The generator now only lists a duplicate when both copies are in the files.
+
+### Orphan refunds and chargebacks
+[Did the relationship tests from refunds and chargebacks to stg_transactions find any? How many, and why?]
+
+### Freshness
+Freshness is checked on loaded_at: warn after 1 day, error after 3. FX rates use 3 and 5 days because there are no rates at weekends. The synthetic data ends on 29 October 2026, so freshness will start failing after that date. That is the check working as intended: no new data is arriving.

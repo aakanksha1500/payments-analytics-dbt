@@ -1,0 +1,40 @@
+sources:
+  - name: raw
+    description: Raw CSV files written by scripts/generate_data.py into data/raw/.
+    config:
+      # dbt-duckdb reads the files directly. {name} is replaced by each table's name,
+      # so source('raw', 'transactions') reads data/raw/transactions/*.csv.
+      # filename = true adds a "filename" column with the file each row came from.
+      # union_by_name = true matches columns by name across files, not by position.
+      external_location: "read_csv('data/raw/{name}/*.csv', filename = true, union_by_name = true)"
+      loaded_at_field: loaded_at
+      freshness:
+        warn_after: {count: 1, period: day}
+        error_after: {count: 3, period: day}
+
+    tables:
+      - name: transactions
+        description: One row per payment attempt, one file per load date. Contains planted duplicates, late rows and null terminal ids.
+
+      - name: refunds
+        description: One row per refund, one file per load date. Contains planted over-refunds.
+
+      - name: chargebacks
+        description: One row per chargeback, one file per load date.
+
+      - name: merchants
+        description: A full extract of all merchants, one file per day. Tier changes appear as a new merchant_tier and later updated_at.
+
+      - name: fx_rates
+        description: Daily FX rates to EUR, weekdays only.
+        config:
+          freshness:
+            # No rates at weekends, so a Monday check would always warn on a 1-day rule.
+            warn_after: {count: 3, period: day}
+            error_after: {count: 5, period: day}
+
+      - name: terminals
+        description: One row per terminal. A single static file.
+        config:
+          external_location: "read_csv('data/raw/terminals.csv', filename = true)"
+          freshness: null

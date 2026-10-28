@@ -594,6 +594,11 @@ def main() -> None:
         "tier_changes": changes_written.astype(str).to_dict(orient="records"),
         "risky": risky,
     }
+    # A duplicate only counts if both copies were written.
+    counts = txns["transaction_id"].value_counts()
+    manifest["planted"]["duplicate_transaction_ids"] = sorted(
+        x for x in manifest["planted"]["duplicate_transaction_ids"] if counts.get(x, 0) > 1
+    )
     (out / "_manifest.json").write_text(json.dumps(manifest, indent=2))
 
     print(f"Wrote {len(txns):,} transactions, {len(refunds):,} refunds, "

@@ -1,2 +1,6 @@
 currency_code,currency_name,minor_units
 EUR,Euro,2
+GBP,Pound Sterling,2
+USD,US Dollar,2
+AED,UAE Dirham,2
+JPY,Japanese Yen,0

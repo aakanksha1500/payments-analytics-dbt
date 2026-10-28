@@ -172,7 +172,7 @@ EUR has no rows; EUR amounts are used as they are.
 model	                 grain	                                answers
 dim_merchant	         one row per merchant version (SCD2)	2, 4, 5
 dim_date	             one row per calendar day	            all
-fct_transactions	     one row per approved or declined payment, with the EUR amount and the merchant version valid at payment time	        2, 3, 5
+fct_transactions	     one row per approved or declined payment, with the EUR amount and the merchant version valid at payment time	                                              2, 3, 5
 fct_daily_settlement	 one row per merchant per day	        1
 merchant_risk_flags	     one row per merchant	                4
 

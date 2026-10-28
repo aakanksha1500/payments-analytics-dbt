@@ -1,0 +1,71 @@
+models:
+  - name: stg_transactions
+    description: One row per transaction. Renamed, cast and deduplicated, keeping the first copy to arrive.
+    columns:
+      - name: transaction_id
+        description: Primary key.
+        data_tests:
+          - unique
+          - not_null
+
+      - name: merchant_id
+        data_tests:
+          - not_null
+          # - relationships:
+          #     arguments:
+          #       to: ref('stg_merchants')
+          #       field: merchant_id
+
+      - name: terminal_id
+        description: Can be null in the raw data. Rows without a terminal are handled in Phase 4.
+        data_tests:
+          - not_null:
+              config:
+                severity: warn
+          - relationships:
+              arguments:
+                to: ref('stg_terminals')
+                field: terminal_id   # planted problem, known and accepted for now
+
+      - name: currency_code
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('currencies')
+                field: currency_code
+
+      - name: status
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['approved', 'declined']
+
+      - name: transaction_at
+        data_tests:
+          - not_null
+
+      - name: loaded_at
+        data_tests:
+          - not_null
+
+  - name: stg_terminals
+    description: One row per terminal.
+    columns:
+      - name: terminal_id
+        description: Primary key.
+        data_tests:
+          - unique
+          - not_null
+
+      - name: merchant_id
+        data_tests:
+          - not_null
+
+      - name: terminal_type
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['countertop', 'mobile', 'online']
+
+      

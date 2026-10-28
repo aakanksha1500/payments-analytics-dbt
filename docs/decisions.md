@@ -114,3 +114,30 @@ One row per merchant version. `merchant_version_key` (dbt's `dbt_scd_id`) identi
 Current versions have `valid_to` set to 9999-12-31 instead of null (`dbt_valid_to_current`), so every join can use `transaction_at < valid_to` without handling nulls.
 
 Two singular tests guard the SCD2 rules: every merchant has exactly one current version, and no two versions of the same merchant overlap. The overlap test is stronger than relying on a unique test on the fact table: it guarantees no join can match two versions for any timestamp, not only for the payments that happen to exist.
+
+## Phase 5, part 2: dim_date and incremental fct_transactions
+
+### dim_date
+One row per calendar day, generated with `dbt_utils.date_spine` over a range set in `vars` (date_spine_start, date_spine_end). It exists so reports can show days with no activity as zero instead of leaving them out. dbt_utils was installed here rather than in Phase 6 because the date spine needs it.
+
+### Why is fct_transactions incremental?
+The table grows every day, and old payments almost never change: only late arrivals from the last few days are new. Rebuilding the whole table each run would reprocess all history to add one day. At 200k rows a full rebuild is still fast, so here incremental is mainly about building the table the way it would need to work at production volume.
+
+Configuration: `unique_key` transaction_id with the `delete+insert` strategy, so reprocessing a row replaces it instead of duplicating it. `on_schema_change='fail'`, so a new column forces a deliberate `--full-refresh` instead of changing the table silently.
+
+### The lookback window
+Each incremental run processes rows with `transaction_at` within `lookback_days` of the newest `transaction_at` already in the table. The watermark comes from the table, not the clock, so a skipped run is picked up where the last successful run stopped.
+
+Tested by generating 60 days and building in full, then generating 90 days and building incrementally:
+- With a 1-day lookback, the newest row was late on 29 September, so the cutoff was late on 28 September. 47 late payments from 27 and 28 September (arriving 30 September to 2 October) fell before the cutoff and were never loaded. Every test still passed.
+- With a 3-day lookback, the incremental result matched the full data exactly: 207,314 rows, none missing.
+
+The lookback must be at least as long as the latest data can arrive. The generator sends rows up to 3 days late, so 3 days is the minimum. A larger window is safer but reprocesses more rows on every run: each extra day means re-reading and replacing about 2,300 rows that have not changed.
+
+After this test, `assert_fct_transactions_is_complete` was added: it checks every transaction in the intermediate layer reaches the fact table, so a lookback that is too short now fails the build instead of losing rows silently.
+
+### Filtering on transaction_at or loaded_at
+The 47 missed rows had old `transaction_at` values but new `loaded_at` values. A watermark on `loaded_at` would have caught them with no lookback, because it selects rows by arrival. `transaction_at` was used because event-date filtering is what lets a partitioned warehouse skip old data. The `loaded_at` approach assumes arrival times only move forward, which breaks if an old file is reloaded with its original timestamps, so in practice it is also paired with a small lookback.
+
+### Merchant tier at the time of the payment
+Each payment joins to the `dim_merchant` version valid at `transaction_at` and stores `merchant_version_key`, `merchant_tier` and `merchant_category`. A not_null test on `merchant_version_key` confirms every payment matched exactly one version.

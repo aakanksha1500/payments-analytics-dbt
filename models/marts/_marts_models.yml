@@ -17,3 +17,43 @@ models:
           - accepted_values:
               arguments:
                 values: ['standard', 'silver', 'gold']
+  
+  - name: dim_date
+    description: One row per calendar day.
+    columns:
+      - name: date_day
+        description: Primary key.
+        data_tests:
+          - unique
+          - not_null
+  
+  - name: fct_transactions
+    description: One row per transaction.
+    columns:
+      - name: transaction_id
+        description: Primary key. Identifies one transaction.
+        data_tests:
+          - unique
+          - not_null
+
+      - name: merchant_version_key
+        description: Foreign key to dim_merchant.
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_merchant')
+                field: merchant_version_key
+
+      - name: transaction_date
+        description: The date of the transaction.
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      
+      - name: amount_eur
+        description: The amount of the transaction, converted to EUR at the rate valid on the transaction date.
+        data_tests:
+          - not_null

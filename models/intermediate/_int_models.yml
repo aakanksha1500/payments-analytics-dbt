@@ -1,0 +1,52 @@
+models:
+  - name: int_transactions_converted
+    description: One row per transaction, with amounts converted to EUR.
+    columns:
+      - name: transaction_id
+        description: Primary key.
+        data_tests:
+          - unique
+          - not_null
+
+      - name: transaction_date
+        data_tests:
+          - not_null
+      
+  - name: int_refunds_matched
+    description: One row per refund, with the original transaction and amounts converted to EUR.
+    columns:
+      - name: refund_id
+        description: Primary key. Guards against fan-out from the three joins.
+        data_tests:
+          - unique
+          - not_null
+
+      - name: merchant_id
+        description: Taken from the refund's terminal, so it is known even for orphan refunds.
+        data_tests:
+          - not_null
+      
+      - name: amount_eur
+        data_tests:
+          - not_null
+      
+  - name: int_chargebacks_matched
+    description: One row per chargeback, matched to its original payment, converted to EUR at the rate valid on the chargeback date.
+    columns:
+      - name: chargeback_id
+        description: Primary key.
+        data_tests:
+          - unique
+          - not_null
+
+      - name: merchant_id
+        data_tests:
+          - not_null:
+              config:
+                severity: warn   
+
+      - name: amount_eur
+        data_tests:
+          - not_null
+
+      

@@ -1,0 +1,52 @@
+{{
+    config(
+        materialized='incremental',
+        unique_key='transaction_id',
+        incremental_strategy='delete+insert',
+        on_schema_change='fail'
+    )
+}}
+
+with transactions as (
+
+    select * from {{ ref('int_transactions_converted') }}
+
+    {% if is_incremental() %}
+    -- Reprocess the last few days on every run so late-arriving rows are caught.
+    where transaction_at >= (
+        select max(transaction_at) - interval '{{ var("lookback_days", 3) }} days'
+        from {{ this }}
+    )
+    {% endif %}
+
+),
+
+merchants as (
+
+    select * from {{ ref('dim_merchant') }}
+
+)
+
+select
+    t.transaction_id,
+    t.merchant_id,
+    m.merchant_version_key,
+    m.merchant_tier,
+    m.merchant_category,
+    t.terminal_id,
+    t.terminal_id is not null                       as has_terminal,
+    t.transaction_at,
+    t.transaction_date,
+    t.loaded_at,
+    t.status,
+    t.card_scheme,
+    t.currency_code,
+    t.amount,
+    t.fx_rate_date,
+    t.amount_eur
+
+from transactions as t
+left join merchants as m
+    on  t.merchant_id = m.merchant_id
+    and t.transaction_at >= m.valid_from
+    and t.transaction_at <  m.valid_to

@@ -87,3 +87,30 @@ Orphan chargebacks are different: chargebacks have no terminal, so their merchan
 ### Flags rather than filters
 Over-refunds, refunds of declined payments and chargeback amount mismatches are flagged (`is_over_refund`, `is_refund_of_declined`, `is_amount_mismatch`), not removed. The intermediate layer records what happened; the marts and the risk rules in Phase 5 and 8 decide how to treat it.
 Flags found: [N over-refunds, N refunds of declined payments, N amount mismatches]
+
+
+## Phase 5, part 1: Merchant snapshot and dim_merchant
+
+### Why replay the snapshot?
+A dbt snapshot only sees its source at the moment it runs. In production it would run every night and build up history over time. The raw data already holds 90 daily extracts, but a single snapshot run would only see the latest one and record no history.
+
+`scripts/replay_merchant_snapshots.sh` rebuilds the history: it drops the snapshot table, then runs `dbt snapshot` once per extract in date order, passing the date with `--vars snapshot_date`. Without the variable, the snapshot reads the latest extract, so a normal `dbt build` behaves like the nightly job. The replay has to be rerun whenever the data is regenerated.
+
+### Timestamp or check strategy?
+Timestamp. The source sets `updated_at` on every tier change, so comparing one column is enough and cheaper than comparing every attribute. It also means a new version's `valid_from` is the real time of the change, not the time the snapshot ran.
+
+The check strategy would be the right choice if `updated_at` could not be trusted, for example if some changes were made without updating it. It compares the listed columns directly, at the cost of comparing them on every run.
+
+### A merchant changes tier twice in one day
+The snapshot records only the second change. [M0XXX] changed from [tier A] to [tier B] and then to [tier C] on [date]. The nightly snapshot saw only the end-of-day state, so the snapshot holds one new version, [tier C], starting at the time of the second change. The [tier B] version, which lasted a few hours, is lost.
+
+This is a limit of snapshots in general: they record states at the times they run, not every change in between. Capturing every change would need the source's own change log (change data capture) rather than periodic extracts.
+
+The row count confirms it: 200 merchants plus 30 tier changes would give 230 versions, and the snapshot has 229.
+
+### dim_merchant
+One row per merchant version. `merchant_version_key` (dbt's `dbt_scd_id`) identifies a version; `merchant_id` repeats across versions. Facts will store the version key, so each payment points at the version that was valid when it happened.
+
+Current versions have `valid_to` set to 9999-12-31 instead of null (`dbt_valid_to_current`), so every join can use `transaction_at < valid_to` without handling nulls.
+
+Two singular tests guard the SCD2 rules: every merchant has exactly one current version, and no two versions of the same merchant overlap. The overlap test is stronger than relying on a unique test on the fact table: it guarantees no join can match two versions for any timestamp, not only for the payments that happen to exist.

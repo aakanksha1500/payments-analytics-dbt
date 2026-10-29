@@ -272,3 +272,18 @@ The state file is written to a temporary file and renamed into place, so a crash
 - A merchant removed from the mart is not reported as removed; the state keeps its last hash. In this data merchants are never removed.
 - One state file means one target. A second destination would need its own state.
 - The outbox stands in for an API. A real one would add retries with backoff and authentication.
+
+
+## Phase 9: CI and code quality
+
+### What CI runs
+`.github/workflows/dbt-ci.yml` runs on every pull request to main, on a clean GitHub machine: install requirements, `dbt deps`, `sqlfluff lint models`, generate a small dataset, replay the merchant snapshot, `dbt build`, and `mf validate-configs`. It proves the project works from a clean clone with nothing that exists only on a laptop.
+
+- Python 3.14, the same as local development, so CI tests the versions actually used.
+- Lint runs before the build: it is fast and needs no data, so style problems fail in seconds.
+- The CI dataset is small (14 days, 300 payments a day, 50 merchants) so every run is quick, but it still exercises every model, test, contract and the snapshot.
+- `dbt source freshness` is not run in CI. The generator writes fixed dates, so freshness would fail on every run after them. Freshness checks live data, not code.
+- Branch protection on main requires the CI check to pass before merging.
+
+### SQL style
+sqlfluff with the dbt templater, so it lints the compiled SQL rather than the Jinja. Lowercase keywords, functions and literals, matching the existing code; maximum line length 120; aligned aliases allowed (`spacing_before = align` for alias expressions), since every model lines up its `as` columns.

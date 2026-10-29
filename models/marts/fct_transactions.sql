@@ -9,14 +9,14 @@
 
 with transactions as (
 
-    select * from {{ ref('int_transactions_converted') }}
+    select t.* from {{ ref('int_transactions_converted') }} as t
 
     {% if is_incremental() %}
     -- Reprocess the last few days on every run so late-arriving rows are caught.
-    where transaction_at >= (
-        select max(transaction_at) - interval '{{ var("lookback_days", 3) }} days'
-        from {{ this }}
-    )
+        where t.transaction_at >= (
+            select max(prev.transaction_at) - interval '{{ var("lookback_days", 3) }} days'
+            from {{ this }} as prev
+        )
     {% endif %}
 
 ),
@@ -34,7 +34,6 @@ select
     m.merchant_tier,
     m.merchant_category,
     t.terminal_id,
-    t.terminal_id is not null                       as has_terminal,
     t.transaction_at,
     t.transaction_date,
     t.loaded_at,
@@ -43,10 +42,12 @@ select
     t.currency_code,
     t.amount,
     t.fx_rate_date,
-    t.amount_eur
+    t.amount_eur,
+    t.terminal_id is not null as has_terminal
 
 from transactions as t
 left join merchants as m
-    on  t.merchant_id = m.merchant_id
-    and t.transaction_at >= m.valid_from
-    and t.transaction_at <  m.valid_to
+    on
+        t.merchant_id = m.merchant_id
+        and t.transaction_at >= m.valid_from
+        and t.transaction_at < m.valid_to

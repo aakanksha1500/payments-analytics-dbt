@@ -97,6 +97,8 @@ models:
               arguments:
                 to: ref('stg_transactions')
                 field: transaction_id
+              config:
+                severity: warn  # planted orphan refunds are expected; flagged for the risk rules.
       
       - name: terminal_id
         data_tests:
@@ -137,6 +139,8 @@ models:
               arguments:
                 to: ref('stg_transactions')
                 field: transaction_id
+              config:
+                severity: warn  # planted orphan chargebacks are expected; flagged for the risk rules.
 
       - name: amount
         data_tests:

@@ -15,6 +15,12 @@ sources:
     tables:
       - name: transactions
         description: One row per payment attempt, one file per load date. Contains planted duplicates, late rows and null terminal ids.
+        columns:
+          - name: transaction_id
+            data_tests:
+              - unique:
+                  config:
+                    severity: warn  # duplicates are expected in raw data; staging removes them.
 
       - name: refunds
         description: One row per refund, one file per load date. Contains planted over-refunds.

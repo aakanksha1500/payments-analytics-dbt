@@ -164,3 +164,31 @@ Every model in `models/marts/` has an enforced contract, set at folder level in 
 They run at different times and check different things. A test runs after the model is built and checks the data: if it fails, the table has already been replaced with the bad version. A contract is checked before the table is built and checks the shape: column names, types and constraints. If it fails, the build stops and the existing table stays as it was.
 
 So a contract protects the people who read the marts from changes to their structure: a renamed column, a dropped column, or a type that quietly changes. Changing `settlement_eur` from `decimal(18,2)` to `double` failed the build before any table was created, while every data test would still have passed on the new table.
+
+
+## Phase 6: Data quality
+
+### Testing the raw problem and the fix separately
+Each planted problem is tested twice: at the source with severity warn, which measures how much of it arrives in the raw data on every run, and after the fix with severity error, which proves the cleaning worked. The source test on transaction_id reports 1,074 duplicates; the same test on stg_transactions reports none. Without the source test, the pipeline would hide whether the problem is growing, shrinking or gone.
+
+### Error or warn
+- **error:** anything that makes an output wrong or incomplete. Keys, relationships into the marts, EUR amounts, settlement reconciliation, completeness of the incremental fact, and the lateness assumption. In `dbt build`, a failing error test skips every model downstream, so bad data never reaches the marts.
+- **warn:** known problems in the raw data that the pipeline handles. Source duplicates, over-refunds and orphan chargebacks. They stay visible on every run without blocking it.
+
+### Thresholds on null terminals
+The not_null test on stg_transactions.terminal_id warns above 0 and errors above [N]. 611 nulls out of about 208,000 transactions is the normal rate in this data. A large jump would mean something upstream broke, and should stop the build rather than flow quietly into the refund rates.
+
+### Testing the lookback assumption
+The 3-day lookback in fct_transactions is only safe if no row arrives more than 3 days late. `expression_is_true` on stg_transactions checks `loaded_at <= transaction_at + lookback_days`, using the same variable as the model. It is an error: if the source ever sends later data, the build stops before the incremental model can lose rows. It passes on the current data.
+
+### The settlement reconciliation test
+`amount_reconciles` is a custom generic test in `tests/generic/`. It compares the total of a column with the total of a column in another model, with an optional filter and tolerance. It is applied three times on fct_daily_settlement (payments, refunds and chargebacks each against their source), plus `expression_is_true` checking settlement_eur = payments − refunds − chargebacks on every row. Tolerance is 0 because every amount is a decimal, which adds up exactly.
+
+### Stored failures
+`store_failures` saves the failing rows of every test to `main_dbt_test__audit`. The over-refund test uses `dbt_utils.expression_is_true` with a fixed `alias` rather than the dbt_expectations pair test, because the dbt_expectations test only stored its true/false result and long test names are shortened with a hash. With full rows under a fixed name, the 15 stored over-refunds were compared with the manifest by refund_id: none missed, none extra.
+
+### dbt_expectations
+Installed as `metaplane/dbt_expectations`; the package moved from calogica, which is now marked outdated. Used for range checks: amounts and FX rates must be greater than 0.
+
+### iCloud and dbt_packages
+The project was first inside ~/Documents, which iCloud Drive syncs. After `dbt clean` and `dbt deps`, iCloud created empty copies of each package folder ("dbt_utils 2" and so on), and dbt refused to run because it counted six packages instead of three. The repo was moved to ~/Projects, outside iCloud, and the virtual environment recreated. Syncing a project folder also risks corrupting the DuckDB file while dbt writes to it.

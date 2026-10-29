@@ -14,12 +14,22 @@ models:
       
   - name: int_refunds_matched
     description: One row per refund, with the original transaction and amounts converted to EUR.
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "amount <= original_amount"
+          config:
+            where: "not is_orphan"
+            severity: warn  # over-refunds are planted; flagged for the risk rules.
+            alias: refund_exceeds_payment
     columns:
       - name: refund_id
         description: Primary key. Guards against fan-out from the three joins.
         data_tests:
           - unique
           - not_null
+
+
 
       - name: merchant_id
         description: Taken from the refund's terminal, so it is known even for orphan refunds.

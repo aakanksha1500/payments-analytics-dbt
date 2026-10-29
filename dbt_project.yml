@@ -44,3 +44,6 @@ models:
 vars:
   date_spine_start: '2026-07-01'
   date_spine_end: '2027-01-01'
+
+data_tests:
+  +store_failures: true

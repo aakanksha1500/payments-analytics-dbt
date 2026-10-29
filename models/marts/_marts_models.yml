@@ -132,6 +132,10 @@ models:
 
   - name: fct_daily_settlement
     description: One row per merchant per day with any activity. Settlement is approved payments minus refunds minus chargebacks, in EUR, each dated by its own event.
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "settlement_eur = payments_eur - refunds_eur - chargebacks_eur"
     columns:
       - name: settlement_key
         description: Primary key, merchant_id and settlement_date.
@@ -161,10 +165,27 @@ models:
         data_type: bigint
       - name: payments_eur
         data_type: decimal(18,2)
+        data_tests:
+          - amount_reconciles:
+              arguments:
+                compare_model: ref('fct_transactions')
+                compare_column: amount_eur
+                compare_where: "status = 'approved'"
       - name: refunds_eur
         data_type: decimal(18,2)
+        data_tests:
+          - amount_reconciles:
+              arguments:
+                compare_model: ref('int_refunds_matched')
+                compare_column: amount_eur
       - name: chargebacks_eur
         data_type: decimal(18,2)
+        data_tests:
+          - amount_reconciles:
+              arguments:
+                compare_model: ref('int_chargebacks_matched')
+                compare_column: amount_eur
+                compare_where: "merchant_id is not null"
       - name: settlement_eur
         description: Can be negative when refunds and chargebacks exceed payments on a day.
         data_type: decimal(18,2)

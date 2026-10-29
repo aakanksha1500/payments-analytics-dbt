@@ -243,3 +243,32 @@ The merchant-level refund rule flagged nobody. The two planted risky terminals' 
 
 ### Known duplication
 chargeback_rate and refund_rate are recomputed in SQL here, although the semantic layer defines them too. dbt models cannot read MetricFlow metrics, so both use the same count-based definition, written in two places.
+
+## Phase 8, part 2: Reverse ETL
+
+### What it does
+`scripts/reverse_etl.py` reads merchant_risk_flags and sends merchants whose risk status changed to the risk team's case system. The target is an outbox folder of JSON Lines files standing in for an API, one file per batch.
+
+### How does the script know what changed?
+It keeps a state file mapping each merchant to a hash of its status at the last successful sync. Each run recomputes the hash for every merchant and sends the ones that are new or different.
+
+The hash covers only the five flags. Counts and rates are sent with each record as context but are left out of the comparison: they move every day as payments arrive, and including them would resend almost every merchant daily without any change in risk status.
+
+This is the same problem as pushing fraud-detection data to Salesforce at IDFC First Bank: deciding what counts as a change, so the receiving system gets updates that matter and not a full copy every run.
+
+### Idempotency
+After a successful run, the state matches the mart. A second run with nothing changed sends nothing.
+
+Tested: first run sent all 200 merchants (empty state, so the risk system gets a full starting picture). Second run sent nothing. Rebuilding the mart with looser thresholds (multiplier 2, minimum 3 chargebacks) sent exactly the 25 merchants whose flags changed; restoring the thresholds sent the same 25 again with their flags cleared, so the risk team is told when a flag is removed, not left with a stale one.
+
+### Why state is saved after sending
+If state were saved first and the send failed, the changes would be marked as delivered and lost: the risk team would never hear about a merchant that became high risk. Saving after a successful send means a failure leaves the state unchanged, and the next run sends the same records again. This is at-least-once delivery: nothing is lost, but some records can arrive twice. The receiving system must therefore upsert on merchant_id ("set this merchant's status") rather than create a new case per record.
+
+Tested with `--fail-after 2`: the run crashed with 2 records written, the state file was unchanged, and the next run sent all 25 changes, so 2 merchants were delivered twice.
+
+The state file is written to a temporary file and renamed into place, so a crash while writing cannot leave a corrupt state.
+
+### Known limitations
+- A merchant removed from the mart is not reported as removed; the state keeps its last hash. In this data merchants are never removed.
+- One state file means one target. A second destination would need its own state.
+- The outbox stands in for an API. A real one would add retries with backoff and authentication.

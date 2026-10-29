@@ -37,4 +37,4 @@ deduplicated as (
 
 )
 
-select * from deduplicated
+select * from renamed

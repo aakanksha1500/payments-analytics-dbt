@@ -37,6 +37,8 @@ models:
       +materialized: view
     marts:
       +materialized: table
+      +contract:
+        enforced: true
       # Add stg_merchants, stg_terminals, stg_refunds, stg_chargebacks and stg_fx_rates below.
 
 vars:

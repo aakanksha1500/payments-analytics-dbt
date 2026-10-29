@@ -1,59 +1,172 @@
 models:
   - name: dim_merchant
-    description: One row per merchant version (SCD2). A new version starts whenever a merchant's attributes change.
+    description: One row per merchant version (SCD2), built from the merchants snapshot. A new version starts whenever a merchant's attributes change.
     columns:
       - name: merchant_version_key
-        description: Primary key. Identifies one version of one merchant.
+        description: Primary key. Identifies one version of one merchant (dbt_scd_id from the snapshot).
+        data_type: varchar
+        constraints:
+          - type: not_null
         data_tests:
           - unique
-          - not_null
-
       - name: merchant_id
-        data_tests:
-          - not_null
-
+        description: The merchant. Repeats across versions.
+        data_type: varchar
+        constraints:
+          - type: not_null
+      - name: merchant_name
+        data_type: varchar
+      - name: merchant_category
+        data_type: varchar
       - name: merchant_tier
+        data_type: varchar
         data_tests:
           - accepted_values:
               arguments:
                 values: ['standard', 'silver', 'gold']
-  
+      - name: country_code
+        data_type: varchar
+      - name: onboarded_at
+        data_type: timestamp
+      - name: valid_from
+        description: Start of the period this version was valid (inclusive). The merchant's updated_at when the change happened.
+        data_type: timestamp
+        constraints:
+          - type: not_null
+      - name: valid_to
+        description: End of the period this version was valid (exclusive). Current versions end at 9999-12-31.
+        data_type: timestamp
+        constraints:
+          - type: not_null
+      - name: is_current
+        description: True for the version valid now. Exactly one per merchant.
+        data_type: boolean
+
   - name: dim_date
-    description: One row per calendar day.
+    description: One row per calendar day, from dbt_utils.date_spine over the range set in vars.
     columns:
       - name: date_day
         description: Primary key.
+        data_type: date
+        constraints:
+          - type: not_null
         data_tests:
           - unique
-          - not_null
-  
+      - name: year
+        data_type: bigint
+      - name: month
+        data_type: bigint
+      - name: day_of_month
+        data_type: bigint
+      - name: day_of_week
+        description: 0 = Sunday, 6 = Saturday.
+        data_type: bigint
+      - name: is_weekend
+        data_type: boolean
+
   - name: fct_transactions
-    description: One row per transaction.
+    description: One row per payment attempt (approved or declined), with the EUR amount and the merchant version valid at the time of payment. Incremental, with a lookback window for late-arriving rows.
     columns:
       - name: transaction_id
         description: Primary key. Identifies one transaction.
+        data_type: varchar
+        constraints:
+          - type: not_null
         data_tests:
           - unique
-          - not_null
-
+      - name: merchant_id
+        data_type: varchar
+        constraints:
+          - type: not_null
       - name: merchant_version_key
-        description: Foreign key to dim_merchant.
+        description: Foreign key to dim_merchant. The merchant version valid at transaction_at.
+        data_type: varchar
+        constraints:
+          - type: not_null
         data_tests:
-          - not_null
           - relationships:
               arguments:
                 to: ref('dim_merchant')
                 field: merchant_version_key
-
+      - name: merchant_tier
+        description: The merchant's tier at the time of the payment.
+        data_type: varchar
+      - name: merchant_category
+        data_type: varchar
+      - name: terminal_id
+        description: Can be null (planted problem). See has_terminal.
+        data_type: varchar
+      - name: has_terminal
+        data_type: boolean
+      - name: transaction_at
+        data_type: timestamp
+        constraints:
+          - type: not_null
       - name: transaction_date
-        description: The date of the transaction.
+        description: The date of the transaction (UTC).
+        data_type: date
         data_tests:
           - relationships:
               arguments:
                 to: ref('dim_date')
                 field: date_day
-      
+      - name: loaded_at
+        description: When the row arrived. Can be up to 3 days after transaction_at.
+        data_type: timestamp
+      - name: status
+        data_type: varchar
+      - name: card_scheme
+        data_type: varchar
+      - name: currency_code
+        data_type: varchar
+      - name: amount
+        description: Amount in the original currency.
+        data_type: decimal(18,2)
+      - name: fx_rate_date
+        description: Date of the FX rate used for amount_eur. Null for EUR payments.
+        data_type: date
       - name: amount_eur
-        description: The amount of the transaction, converted to EUR at the rate valid on the transaction date.
+        data_type: decimal(18,2)
+        constraints:
+          - type: not_null
+
+  - name: fct_daily_settlement
+    description: One row per merchant per day with any activity. Settlement is approved payments minus refunds minus chargebacks, in EUR, each dated by its own event.
+    columns:
+      - name: settlement_key
+        description: Primary key, merchant_id and settlement_date.
+        data_type: varchar
+        constraints:
+          - type: not_null
         data_tests:
-          - not_null
+          - unique
+      - name: merchant_id
+        data_type: varchar
+        constraints:
+          - type: not_null
+      - name: settlement_date
+        data_type: date
+        constraints:
+          - type: not_null
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('dim_date')
+                field: date_day
+      - name: payment_count
+        data_type: bigint
+      - name: refund_count
+        data_type: bigint
+      - name: chargeback_count
+        data_type: bigint
+      - name: payments_eur
+        data_type: decimal(18,2)
+      - name: refunds_eur
+        data_type: decimal(18,2)
+      - name: chargebacks_eur
+        data_type: decimal(18,2)
+      - name: settlement_eur
+        description: Can be negative when refunds and chargebacks exceed payments on a day.
+        data_type: decimal(18,2)
+        constraints:
+          - type: not_null

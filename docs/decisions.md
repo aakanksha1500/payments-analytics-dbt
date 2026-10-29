@@ -141,3 +141,26 @@ The 47 missed rows had old `transaction_at` values but new `loaded_at` values. A
 
 ### Merchant tier at the time of the payment
 Each payment joins to the `dim_merchant` version valid at `transaction_at` and stores `merchant_version_key`, `merchant_tier` and `merchant_category`. A not_null test on `merchant_version_key` confirms every payment matched exactly one version.
+
+## Phase 5, part 3: Daily settlement and contracts
+
+### How settlement is built
+Each fact is reduced to one row per merchant per day on its own first: approved payments by payment date, refunds by refund date, chargebacks by chargeback date. The three results are stacked with `union all`, each part filling its own columns and zeros elsewhere, and grouped again.
+
+Joining the facts first would repeat a payment once per refund and double count it. Joining the three aggregates would need a full outer join and coalesce on every key, because a merchant can have refunds on a day with no payments. Stacking and regrouping handles that without extra logic.
+
+Checked by comparing the mart total with the totals computed directly from the sources: both [total] EUR.
+
+### Decisions inside the settlement
+- Refunds are included even when their original payment was declined: the refund was issued and the money left. These refunds are already flagged for the risk rules in Phase 8.
+- Orphan chargebacks are left out until their payment arrives, because their merchant comes from the payment. They are picked up automatically on the next run after it does.
+- Settlement can be negative: a day with large refunds and few payments means the merchant owes money back.
+- Rows exist only for days with activity. A full merchant-by-day grid can be built by joining to dim_date when a report needs zero days.
+
+### Contracts
+Every model in `models/marts/` has an enforced contract, set at folder level in `dbt_project.yml` so a new mart cannot be added without one. Each contract lists every column with its type; primary keys and required columns have `not_null` constraints, which the database enforces on insert. Types were taken from the database with `describe`, and any column whose type came out wrong was fixed with a cast in the model, not in the contract.
+
+### What does a contract protect against that a test does not?
+They run at different times and check different things. A test runs after the model is built and checks the data: if it fails, the table has already been replaced with the bad version. A contract is checked before the table is built and checks the shape: column names, types and constraints. If it fails, the build stops and the existing table stays as it was.
+
+So a contract protects the people who read the marts from changes to their structure: a renamed column, a dropped column, or a type that quietly changes. Changing `settlement_eur` from `decimal(18,2)` to `double` failed the build before any table was created, while every data test would still have passed on the new table.

@@ -192,3 +192,36 @@ Installed as `metaplane/dbt_expectations`; the package moved from calogica, whic
 
 ### iCloud and dbt_packages
 The project was first inside ~/Documents, which iCloud Drive syncs. After `dbt clean` and `dbt deps`, iCloud created empty copies of each package folder ("dbt_utils 2" and so on), and dbt refused to run because it counted six packages instead of three. The repo was moved to ~/Projects, outside iCloud, and the virtual environment recreated. Syncing a project folder also risks corrupting the DuckDB file while dbt writes to it.
+
+## Phase 7: Semantic layer
+
+### Why define rates in the semantic layer, not as columns in a mart?
+A rate has to be calculated as total numerator over total denominator at the grain of the question. Stored as a column, it gets averaged. A merchant with 1 chargeback out of 10 payments on Monday (10%) and 0 out of 990 on Tuesday (0%) averages to 5%, while the true rate over the two days is 1 in 1,000, or 0.1%. Defined once as a ratio metric, MetricFlow computes sum(chargebacks) / sum(payments) after grouping, for any grouping asked for. `mf query --explain` confirms the division happens after the group by.
+
+It also gives one definition for everyone. Finance and risk querying the same `chargeback_rate` cannot drift apart the way two hand-written SQL versions would.
+
+### YAML format
+dbt Core 1.12 introduced a new semantic layer YAML format: semantic settings sit inside each model's own entry, entities and dimensions are set on columns, and simple metrics replace measures. It was used here and works with dbt-metricflow on DuckDB. Most published examples still use the older top-level `semantic_models:` format.
+
+### Semantic models
+- `transactions` on fct_transactions: payment volume and counts, with tier and category as they were at the time of each payment.
+- `daily_settlement` on fct_daily_settlement: settlement, refund, chargeback and payment counts per merchant per day.
+- `merchants` on dim_merchant_current: each merchant's current category, tier and country.
+
+MetricFlow joins semantic models on entities, and the model being joined to needs one row per entity. dim_merchant has one row per version, so dim_merchant_current (current versions only) was added for that role. The consequence: grouping settlement metrics by `merchant__merchant_tier` uses the current tier. For tier at the time of payment, use `transaction__merchant_tier` from the transactions model. Category never changes in this data, so both give the same answer for category.
+
+dim_date doubles as the MetricFlow time spine.
+
+### Metrics
+- Simple: gross_payment_volume_eur, approved_payment_count, settlement_eur, settled_payment_count, refund_count, chargeback_count.
+- Ratio: chargeback_rate and refund_rate, both count-based as in design.md. Numerator and denominator come from the same semantic model, so they always cover the same merchant-days.
+
+### Checks
+- `mf validate-configs` passes.
+- chargeback_rate by merchant ranks the three merchants the generator made risky at the top.
+
+### Reading the results
+Weekly results include two partial weeks: the week of 27 July holds only 1 and 2 August, and the week of 26 October ends on the 29th. Refund rate is low in the first weeks because refunds come up to 14 days after the payment and are dated by refund date, so early payments have not been refunded yet. Neither is a bug, but a dashboard should exclude or label partial and early periods.
+
+### Dependency
+dbt-metricflow is pinned in requirements.txt. It requires Python older than 3.15.

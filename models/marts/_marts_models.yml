@@ -44,10 +44,13 @@ models:
 
   - name: dim_date
     description: One row per calendar day, from dbt_utils.date_spine over the range set in vars.
+    time_spine:
+      standard_granularity_column: date_day
     columns:
       - name: date_day
         description: Primary key.
         data_type: date
+        granularity: day
         constraints:
           - type: not_null
         data_tests:
@@ -66,6 +69,10 @@ models:
 
   - name: fct_transactions
     description: One row per payment attempt (approved or declined), with the EUR amount and the merchant version valid at the time of payment. Incremental, with a lookback window for late-arriving rows.
+    semantic_model:
+      enabled: true
+      name: transactions
+    agg_time_dimension: transaction_date
     columns:
       - name: transaction_id
         description: Primary key. Identifies one transaction.
@@ -74,10 +81,16 @@ models:
           - type: not_null
         data_tests:
           - unique
+        entity:
+          name: transaction
+          type: primary
       - name: merchant_id
         data_type: varchar
         constraints:
           - type: not_null
+        entity:
+          name: merchant
+          type: foreign
       - name: merchant_version_key
         description: Foreign key to dim_merchant. The merchant version valid at transaction_at.
         data_type: varchar
@@ -91,8 +104,12 @@ models:
       - name: merchant_tier
         description: The merchant's tier at the time of the payment.
         data_type: varchar
+        dimension:
+          type: categorical
       - name: merchant_category
         data_type: varchar
+        dimension:
+          type: categorical
       - name: terminal_id
         description: Can be null (planted problem). See has_terminal.
         data_type: varchar
@@ -110,15 +127,24 @@ models:
               arguments:
                 to: ref('dim_date')
                 field: date_day
+        granularity: day
+        dimension:
+          type: time
       - name: loaded_at
         description: When the row arrived. Can be up to 3 days after transaction_at.
         data_type: timestamp
       - name: status
         data_type: varchar
+        dimension:
+          type: categorical
       - name: card_scheme
         data_type: varchar
+        dimension:
+          type: categorical
       - name: currency_code
         data_type: varchar
+        dimension:
+          type: categorical
       - name: amount
         description: Amount in the original currency.
         data_type: decimal(18,2)
@@ -129,9 +155,24 @@ models:
         data_type: decimal(18,2)
         constraints:
           - type: not_null
+    metrics:
+      - name: gross_payment_volume_eur
+        description: Sum of approved payments in EUR.
+        type: simple
+        agg: sum
+        expr: "case when status = 'approved' then amount_eur else 0 end"
+      - name: approved_payment_count
+        description: Number of approved payments.
+        type: simple
+        agg: sum
+        expr: "case when status = 'approved' then 1 else 0 end"
 
   - name: fct_daily_settlement
     description: One row per merchant per day with any activity. Settlement is approved payments minus refunds minus chargebacks, in EUR, each dated by its own event.
+    semantic_model:
+      enabled: true
+      name: daily_settlement
+    agg_time_dimension: settlement_date
     data_tests:
       - dbt_utils.expression_is_true:
           arguments:
@@ -144,14 +185,23 @@ models:
           - type: not_null
         data_tests:
           - unique
+        entity:
+          name: settlement
+          type: primary
       - name: merchant_id
         data_type: varchar
         constraints:
           - type: not_null
+        entity:
+          name: merchant
+          type: foreign
       - name: settlement_date
         data_type: date
         constraints:
           - type: not_null
+        dimension:
+          type: time
+        granularity: day
         data_tests:
           - relationships:
               arguments:
@@ -191,3 +241,67 @@ models:
         data_type: decimal(18,2)
         constraints:
           - type: not_null
+    metrics:
+      - name: settlement_eur
+        description: Total settlement amount in EUR.
+        type: simple
+        agg: sum
+        expr: settlement_eur
+      - name: settled_payment_count
+        description: Total number of settled payments.
+        type: simple
+        agg: sum
+        expr: payment_count
+      - name: refund_count
+        description: Total number of refunds.
+        type: simple
+        agg: sum
+        expr: refund_count
+      - name: chargeback_count
+        description: Total number of chargebacks.
+        type: simple
+        agg: sum
+        expr: chargeback_count
+
+  - name: dim_merchant_current
+    description: One row per merchant, with the current version's attributes. Built from dim_merchant.
+    semantic_model:
+      enabled: true
+      name: merchants
+    columns: 
+      - name: merchant_id
+        data_type: varchar
+        constraints:
+          - type: not_null
+        data_tests:
+          - unique
+        entity:
+          name: merchant
+          type: primary 
+      - name: merchant_name
+        data_type: varchar
+      - name: merchant_category
+        data_type: varchar
+        dimension:
+          type: categorical
+      - name: merchant_tier
+        data_type: varchar
+        dimension:
+          type: categorical
+      - name: country_code
+        data_type: varchar
+        dimension:
+          type: categorical
+
+metrics:
+  - name: chargeback_rate
+    description: Chargebacks received divided by approved payments in the same period (count-based, as in design.md).
+    type: ratio
+    numerator: chargeback_count
+    denominator: settled_payment_count
+
+  - name: refund_rate
+    description: Refunds issued divided by approved payments in the same period (count-based).
+    type: ratio
+    numerator: refund_count
+    denominator: settled_payment_count

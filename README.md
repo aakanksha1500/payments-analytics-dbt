@@ -1,5 +1,5 @@
 # payments-analytics-dbt
-
+![dbt CI](https://github.com/aakanksha1500/payments-analytics-dbt/actions/workflows/dbt-ci.yml/badge.svg)
 A dbt project modelling card payments data (merchants, terminals, transactions, refunds, chargebacks, FX rates) on DuckDB.
 
 ## Getting started
@@ -34,3 +34,15 @@ Found by tests but not planted:
 - The currency seed only contained EUR (relationship test to the seed, 41,620 rows).
 - Five manifest duplicates that were never written (unique test count disagreed with the manifest).
 - No FX rate for the first weekend (EUR singular test, 940 rows).
+
+## CI
+
+Every pull request runs `.github/workflows/dbt-ci.yml` on a clean machine: SQL lint (sqlfluff), a small generated dataset, the merchant snapshot replay, `dbt build` with every test and contract, and `mf validate-configs`. `main` is protected: a PR can only merge when the check passes.
+
+A passing PR:
+
+![CI passing](docs/images/ci-green.png)
+
+A PR that removes deduplication from stg_transactions, caught by the unique test:
+
+![CI failing](docs/images/ci-red.png)

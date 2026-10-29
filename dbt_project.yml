@@ -44,6 +44,12 @@ models:
 vars:
   date_spine_start: '2026-07-01'
   date_spine_end: '2027-01-01'
+  risk_window_days: 30
+  risk_min_payments: 50
+  risk_refund_rate_threshold: 0.10
+  risk_min_chargebacks: 5
+  risk_chargeback_multiplier: 4
+  risk_min_terminal_payments: 30
 
 data_tests:
   +store_failures: true

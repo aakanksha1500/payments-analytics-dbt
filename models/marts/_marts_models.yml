@@ -292,6 +292,50 @@ models:
         data_type: varchar
         dimension:
           type: categorical
+  
+  - name: merchant_risk_flags
+    description: One row per merchant, with risk flags set according to the rules in design.md.
+    data_tests:
+      - dbt_expectations.expect_table_row_count_to_equal_other_table:
+          arguments:
+            compare_model: ref('dim_merchant_current')
+    columns:
+      - name: merchant_id
+        data_type: varchar
+        constraints:
+          - type: not_null
+        data_tests:
+          - unique
+      - name: merchant_category
+        data_type: varchar
+      - name: approved_payment_count
+        data_type: hugeint
+      - name: refund_count
+        data_type: hugeint
+      - name: chargeback_count
+        data_type: hugeint
+      - name: over_refund_count
+        data_type: bigint
+      - name: chargeback_rate
+        data_type: double
+      - name: refund_rate
+        data_type: double
+      - name: category_median_chargeback_rate
+        data_type: double
+      - name: flag_high_refunds
+        data_type: boolean
+      - name: flag_high_chargebacks
+        data_type: boolean
+      - name: flag_over_refund
+        data_type: boolean
+      - name: is_high_risk
+        data_type: boolean
+      - name: as_of_date
+        data_type: date
+      - name: high_refund_terminal_count
+        data_type: hugeint
+      - name: flag_high_refund_terminal
+        data_type: boolean
 
 metrics:
   - name: chargeback_rate

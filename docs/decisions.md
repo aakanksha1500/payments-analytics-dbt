@@ -225,3 +225,21 @@ Weekly results include two partial weeks: the week of 27 July holds only 1 and 2
 
 ### Dependency
 dbt-metricflow is pinned in requirements.txt. It requires Python older than 3.15.
+
+## Phase 8, part 1: Merchant risk flags
+
+### The mart
+merchant_risk_flags has one row per current merchant, including merchants with no activity, so every merchant has a known status. The window is the 30 days ending on the latest date in the data (as_of_date), not today's date, so the same data always gives the same flags. All thresholds are dbt vars, because they are business decisions the risk team will want to change.
+
+### Chargeback rule: why a minimum count
+The first version (chargeback rate above 2 times the category median, with at least 50 payments) flagged 36 of 200 merchants. Most had 1 to 4 chargebacks. A normal merchant expects about 1.4 chargebacks in 30 days, so ordinary variation pushes many over a rate threshold, and four merchants were flagged on a single chargeback. A rate based on few events is mostly noise: what matters is how many chargebacks the rate rests on, not how many payments.
+
+The rule now also requires at least 5 chargebacks, and the multiplier is 4. It flags exactly the three planted merchants (M0035, M0052, M0120), which were 6 to 11 times their category median.
+
+These thresholds were chosen while looking at data generated for this project, so they are partly tuned to it. In practice they would be set with the risk team, based on how many cases it can review, and checked against false positives over several months. A fixed minimum count also treats small and large merchants the same: M0163 had 3 chargebacks on 110 payments, nearly 8 times its median, which is unlikely by chance but below the minimum. A statistical test (how unlikely is this count, given the merchant's volume and its category's rate?) would handle both cases.
+
+### Refund rules: merchant and terminal
+The merchant-level refund rule flagged nobody. The two planted risky terminals' merchants had refund rates of 6.9% and 5.5%, about double normal, but below 10%, because their other terminals diluted the rate. Problems like a faulty machine or staff refunding to their own cards live at one terminal, so a terminal-level rule was added: a merchant is flagged if any terminal with at least 30 payments has a refund rate above 10%. It flags the two planted terminals' merchants. The merchant-level rule stays, to catch merchants with high refunds everywhere.
+
+### Known duplication
+chargeback_rate and refund_rate are recomputed in SQL here, although the semantic layer defines them too. dbt models cannot read MetricFlow metrics, so both use the same count-based definition, written in two places.

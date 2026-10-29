@@ -1,6 +1,10 @@
 models:
   - name: stg_transactions
     description: One row per transaction. Renamed, cast and deduplicated, keeping the first copy to arrive.
+    data_tests:
+      - dbt_utils.expression_is_true:
+          arguments:
+            expression: "loaded_at <= transaction_at + interval '{{ var('lookback_days', 3) }} days'"
     columns:
       - name: transaction_id
         description: Primary key.
@@ -21,7 +25,9 @@ models:
         data_tests:
           - not_null:
               config:
-                severity: warn # planted problem, known and accepted for now
+                severity: error
+                warn_if: ">0"
+                error_if: ">2000" # planted problem, known and accepted for now
           - relationships:
               arguments:
                 to: ref('stg_terminals')
@@ -48,6 +54,13 @@ models:
       - name: loaded_at
         data_tests:
           - not_null
+      
+      - name: amount
+        data_tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                strictly: true
 
   - name: stg_terminals
     description: One row per terminal.
@@ -103,6 +116,10 @@ models:
       - name: amount
         data_tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                strictly: true
 
   - name: stg_chargebacks
     description: One row per chargeback.
@@ -124,6 +141,10 @@ models:
       - name: amount
         data_tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                strictly: true
 
       - name: currency_code
         data_tests:
@@ -151,6 +172,10 @@ models:
         description: FX rate to EUR.
         data_tests:
           - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              arguments:
+                min_value: 0
+                strictly: true
 
       - name: currency_code
         data_tests:

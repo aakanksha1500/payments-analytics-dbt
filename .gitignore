@@ -10,3 +10,4 @@ data/raw/
 .DS_Store
 .user.yml
 data/reverse_etl/
+dbt_packages.nosync/

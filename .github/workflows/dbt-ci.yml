@@ -1,0 +1,41 @@
+name: dbt CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  dbt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install dbt packages
+        run: dbt deps
+
+      - name: Lint SQL
+        run: sqlfluff lint models
+
+      - name: Generate a small dataset
+        run: python scripts/generate_data.py --seed 42 --days 14 --txns-per-day 300 --merchants 50 --terminals 150
+
+      - name: Replay the merchant snapshot
+        run: bash scripts/replay_merchant_snapshots.sh
+
+      - name: Build and test
+        run: dbt build
+
+      - name: Validate the semantic layer
+        run: mf validate-configs

@@ -1,0 +1,21 @@
+[sqlfluff]
+templater = dbt
+dialect = duckdb
+max_line_length = 120
+
+[sqlfluff:templater:dbt]
+project_dir = .
+profiles_dir = .
+
+[sqlfluff:rules:capitalisation.keywords]
+capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.functions]
+extended_capitalisation_policy = lower
+
+[sqlfluff:rules:capitalisation.literals]
+capitalisation_policy = lower
+
+[sqlfluff:layout:type:alias_expression]
+spacing_before = align
+align_within = select_clause

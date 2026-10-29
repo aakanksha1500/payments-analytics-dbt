@@ -11,7 +11,7 @@ with payments as (
         0                as chargebacks_eur
     from {{ ref('fct_transactions') }}
     where status = 'approved'
-    group by 1, 2
+    group by merchant_id, transaction_date
 
 ),
 
@@ -27,7 +27,7 @@ refunds as (
         0               as chargeback_count,
         0               as chargebacks_eur
     from {{ ref('int_refunds_matched') }}
-    group by 1, 2
+    group by merchant_id, refund_date
 
 ),
 
@@ -47,8 +47,7 @@ chargebacks as (
         sum(amount_eur) as chargebacks_eur
     from {{ ref('int_chargebacks_matched') }}
     where merchant_id is not null
-    group by 1, 2
-
+    group by merchant_id, chargeback_date
 ),
 
 combined as (

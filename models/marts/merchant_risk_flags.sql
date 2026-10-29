@@ -120,7 +120,7 @@ flagged as (
     select
         r.*,
         c.category_median_chargeback_rate,
-
+        a.as_of_date,
         r.approved_payment_count >= {{ var('risk_min_payments') }}
         and r.chargeback_count >= {{ var('risk_min_chargebacks') }}
         and r.chargeback_rate > {{ var('risk_chargeback_multiplier') }} * c.category_median_chargeback_rate
@@ -134,6 +134,7 @@ flagged as (
     from merchant_rates as r
     left join category_medians as c
         on r.merchant_category = c.merchant_category
+    cross join as_of as a
 
 )
 
@@ -156,5 +157,5 @@ select
     or flag_high_refunds
     or high_refund_terminal_count > 0
     or flag_over_refund                    as is_high_risk,
-    (select as_of_date from as_of)         as as_of_date
+    as_of_date
 from flagged

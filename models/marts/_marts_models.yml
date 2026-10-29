@@ -55,9 +55,9 @@ models:
           - type: not_null
         data_tests:
           - unique
-      - name: year
+      - name: calendar_year
         data_type: bigint
-      - name: month
+      - name: calendar_month
         data_type: bigint
       - name: day_of_month
         data_type: bigint

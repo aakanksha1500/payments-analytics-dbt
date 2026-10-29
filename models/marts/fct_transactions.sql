@@ -9,13 +9,13 @@
 
 with transactions as (
 
-    select * from {{ ref('int_transactions_converted') }}
+    select t.* from {{ ref('int_transactions_converted') }} as t
 
     {% if is_incremental() %}
     -- Reprocess the last few days on every run so late-arriving rows are caught.
-        where transaction_at >= (
-            select max(transaction_at) - interval '{{ var("lookback_days", 3) }} days'
-            from {{ this }}
+        where t.transaction_at >= (
+            select max(prev.transaction_at) - interval '{{ var("lookback_days", 3) }} days'
+            from {{ this }} as prev
         )
     {% endif %}
 
